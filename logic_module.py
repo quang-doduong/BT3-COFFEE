@@ -4,16 +4,15 @@ from sklearn.preprocessing import StandardScaler
 import os
 import time
 
-# Biến toàn cục lưu trữ mô hình trong bộ nhớ
 AI_MODEL = None
 AI_SCALER = None
 MODEL_COLUMNS = None
 
+# Hệ số tăng trưởng cuối tuần (Bạn có thể điều chỉnh con số 1.4 này)
+WEEKEND_FACTOR = 1.4 
+
 def init_brain():
-    """Hàm này sẽ được gọi lúc mở App để train AI sẵn"""
     global AI_MODEL, AI_SCALER, MODEL_COLUMNS
-    
-    # Giả định file CSV nằm cùng thư mục
     csv_path = os.path.join(os.path.dirname(__file__), 'Data_Du_Doan_Doanh_Thu_Full.csv')
     
     try:
@@ -25,7 +24,6 @@ def init_brain():
         y = data_processed['Doanh_Thu_Ngay']
         
         MODEL_COLUMNS = list(X.columns)
-        
         AI_SCALER = StandardScaler()
         X_scaled = AI_SCALER.fit_transform(X)
         
@@ -36,25 +34,37 @@ def init_brain():
         print(f"Lỗi khởi tạo AI: {e}")
         return False
 
-def predict_revenue(user_input_dict):
-    """Hàm nhận data từ UI và trả về dự đoán"""
+def predict_revenue_advanced(user_input_dict):
     global AI_MODEL, AI_SCALER, MODEL_COLUMNS
     
     if not AI_MODEL:
-        raise ValueError("AI chưa được huấn luyện! Thiếu file dữ liệu.")
+        raise ValueError("AI chưa được huấn luyện!")
         
-    # Giả lập delay một chút để UI chạy hiệu ứng "Đang phân tích..." cho chuyên nghiệp
-    time.sleep(1.2) 
+    time.sleep(1) 
     
+    # 1. Dự đoán doanh thu cơ sở (Ngày thường)
     df_new = pd.DataFrame([user_input_dict])
     df_new = pd.get_dummies(df_new, columns=['Vi_tri'])
-    
-    # Khớp cột tự động
     df_new = df_new.reindex(columns=MODEL_COLUMNS, fill_value=0)
-    
     X_new_scaled = AI_SCALER.transform(df_new)
     
-    doanh_thu_ngay = AI_MODEL.predict(X_new_scaled)[0]
-    doanh_thu_thang = doanh_thu_ngay * 30
+    rev_weekday = AI_MODEL.predict(X_new_scaled)[0]
     
-    return doanh_thu_ngay, doanh_thu_thang
+    # 2. Tính toán theo logic kinh doanh thực tế
+    # Tổng doanh thu 22 ngày thường
+    total_weekday = rev_weekday * 22
+    
+    # Doanh thu ngày cuối tuần (nhân hệ số)
+    rev_weekend = rev_weekday * WEEKEND_FACTOR
+    
+    # Tổng doanh thu 8 ngày cuối tuần
+    total_weekend = rev_weekend * 8
+    
+    # Tổng doanh thu tháng
+    total_month = total_weekday + total_weekend
+    
+    return {
+        'weekday_single': rev_weekday,
+        'weekend_single': rev_weekend,
+        'total_month': total_month
+    }
